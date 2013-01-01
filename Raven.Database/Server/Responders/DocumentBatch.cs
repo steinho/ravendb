@@ -4,15 +4,15 @@
 // </copyright>
 //-----------------------------------------------------------------------
 using System;
-using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Raven.Abstractions.Data;
 using Raven.Abstractions.Logging;
 using Raven.Database.Data;
 using Raven.Database.Extensions;
 using Raven.Database.Impl;
-using Raven.Database.Json;
 using Raven.Database.Server.Abstractions;
 using Raven.Json.Linq;
 
@@ -20,6 +20,8 @@ namespace Raven.Database.Server.Responders
 {
 	public class DocumentBatch : AbstractRequestResponder
 	{
+		private static long opCounter;
+
 		public override string UrlPattern
 		{
 			get { return @"^/bulk_docs(/(.+))?"; }
@@ -27,14 +29,26 @@ namespace Raven.Database.Server.Responders
 
 		public override string[] SupportedVerbs
 		{
-			get { return new[] { "POST", "PATCH", "EVAL", "DELETE" }; }
+			get { return new[] { "POST", "PATCH", "EVAL", "DELETE", "GET" }; }
 		}
 
 		public override void Respond(IHttpContext context)
 		{
 			var databaseBulkOperations = new DatabaseBulkOperations(Database, GetRequestTransaction(context));
 			switch (context.Request.HttpMethod)
-			{                
+			{               
+				case "GET":
+					var id = context.Request.QueryString["id"];
+					var backgroundExecuteStatus = Database.GetBackgroundExecuteStatus(id);
+					if(backgroundExecuteStatus == null)
+					{
+						context.SetStatusToNotFound();
+					}
+					else
+					{
+						context.WriteJson(backgroundExecuteStatus);
+					}
+					break;
 				case "POST":
 					Batch(context);
 					break;
@@ -44,19 +58,19 @@ namespace Raven.Database.Server.Responders
 				case "PATCH":
 					var patchRequestJson = context.ReadJsonArray();
 					var patchRequests = patchRequestJson.Cast<RavenJObject>().Select(PatchRequest.FromJson).ToArray();
-					OnBulkOperation(context, (index, query, allowStale) =>
-						databaseBulkOperations.UpdateByIndex(index, query, patchRequests, allowStale));
+					OnBulkOperation(context, (index, query, allowStale, results) =>
+						databaseBulkOperations.UpdateByIndex(index, query, patchRequests, allowStale, results));
 					break;
 				case "EVAL":
 					var advPatchRequestJson = context.ReadJsonObject<RavenJObject>();
 					var advPatch = ScriptedPatchRequest.FromJson(advPatchRequestJson);
-					OnBulkOperation(context, (index, query, allowStale) =>
-						databaseBulkOperations.UpdateByIndex(index, query, advPatch, allowStale));
+					OnBulkOperation(context, (index, query, allowStale, results) =>
+						databaseBulkOperations.UpdateByIndex(index, query, advPatch, allowStale, results));
 					break;
 			}
 		}
 
-		private void OnBulkOperation(IHttpContext context, Func<string, IndexQuery, bool, RavenJArray> batchOperation)
+		private void OnBulkOperation(IHttpContext context, Action<string, IndexQuery, bool, RavenJArray> batchOperation)
 		{
 			var match = urlMatcher.Match(context.GetRequestUrl());
 			var index = match.Groups[2].Value;
@@ -68,9 +82,17 @@ namespace Raven.Database.Server.Responders
 			var allowStale = context.GetAllowStale();
 			var indexQuery = context.GetIndexQueryFromHttpContext(maxPageSize: int.MaxValue);
 
-			var array = batchOperation(index, indexQuery, allowStale);
 
-			context.WriteJson(array);
+			var id = Interlocked.Increment(ref opCounter).ToString(CultureInfo.InvariantCulture);
+
+			var results = new RavenJArray();
+			Database.BackgroundExecute(id, results, () => batchOperation(index, indexQuery, allowStale, results ));
+
+			context.WriteJson(new
+			{
+				OperationStarted = true,
+				OperationId = id,
+			});
 		}
 		
 		private void Batch(IHttpContext context)

@@ -46,6 +46,7 @@ using Constants = Raven.Abstractions.Data.Constants;
 using Raven.Json.Linq;
 using BitConverter = System.BitConverter;
 using Index = Raven.Database.Indexing.Index;
+using Task = System.Threading.Tasks.Task;
 using TransactionInformation = Raven.Abstractions.Data.TransactionInformation;
 
 namespace Raven.Database
@@ -132,6 +133,8 @@ namespace Raven.Database
 		private readonly object idleLocker = new object();
 
 		private static readonly ILog log = LogManager.GetCurrentClassLogger();
+
+		private readonly ConcurrentDictionary<string, Tuple<Task, RavenJToken>> pendingTasks = new ConcurrentDictionary<string, Tuple<Task, RavenJToken>>();
 
 		private readonly SizeLimitedConcurrentDictionary<string, TouchedDocumentInfo> recentTouches =
 			new SizeLimitedConcurrentDictionary<string, TouchedDocumentInfo>(1024, StringComparer.InvariantCultureIgnoreCase);
@@ -414,6 +417,11 @@ namespace Raven.Database
 			}
 
 			var exceptionAggregator = new ExceptionAggregator(log, "Could not properly dispose of DatabaseDocument");
+
+			foreach (var pendingTask in pendingTasks.Values)
+			{
+				exceptionAggregator.Execute(pendingTask.Item1.Wait);
+			}
 
 			exceptionAggregator.Execute(() =>
 			{
@@ -1978,6 +1986,31 @@ namespace Raven.Database
 			TouchedDocumentInfo info;
 			recentTouches.TryGetValue(key, out info);
 			return info;
+		}
+
+		public void BackgroundExecute(string id, RavenJToken status, Action action)
+		{
+			log.Debug("Starting to execute task {0}", id);
+			var theTask = Task.Factory.StartNew(action,CancellationToken.None, TaskCreationOptions.None, backgroundTaskScheduler)
+				.ContinueWith(task =>
+				{
+					if (task.IsFaulted)
+						log.WarnException("Failed to executed batch operation: " + id, task.Exception);
+					else
+						log.Debug("Task {0} completed", id);
+					Tuple<Task, RavenJToken> _;
+					pendingTasks.TryRemove(id, out _);
+
+				});
+			pendingTasks.TryAdd(id, Tuple.Create(theTask, status));
+		}
+
+		public RavenJToken GetBackgroundExecuteStatus(string id)
+		{
+			Tuple<Task, RavenJToken> value;
+			if (pendingTasks.TryGetValue(id, out value) == false)
+				return null;
+			return value.Item2;
 		}
 	}
 

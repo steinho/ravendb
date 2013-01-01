@@ -603,7 +603,7 @@ namespace Raven.Client.Embedded
 		{
 			CurrentOperationContext.Headers.Value = OperationsHeaders;
 			var databaseBulkOperations = new DatabaseBulkOperations(database, TransactionInformation);
-			databaseBulkOperations.UpdateByIndex(indexName, queryToUpdate, patchRequests, allowStale);
+			databaseBulkOperations.UpdateByIndex(indexName, queryToUpdate, patchRequests, allowStale, new RavenJArray());
 		}
 
 		/// <summary>
@@ -617,7 +617,7 @@ namespace Raven.Client.Embedded
 		{
 			CurrentOperationContext.Headers.Value = OperationsHeaders;
 			var databaseBulkOperations = new DatabaseBulkOperations(database, RavenTransactionAccessor.GetTransactionInformation());
-			databaseBulkOperations.UpdateByIndex(indexName, queryToUpdate, patch, allowStale);
+			databaseBulkOperations.UpdateByIndex(indexName, queryToUpdate, patch, allowStale, new RavenJArray());
 		}
 
 		/// <summary>
@@ -641,7 +641,7 @@ namespace Raven.Client.Embedded
 		{
 			CurrentOperationContext.Headers.Value = OperationsHeaders;
 			var databaseBulkOperations = new DatabaseBulkOperations(database, TransactionInformation);
-			databaseBulkOperations.DeleteByIndex(indexName, queryToDelete, allowStale);
+			databaseBulkOperations.DeleteByIndex(indexName, queryToDelete, allowStale, new RavenJArray());
 		}
 
 		/// <summary>

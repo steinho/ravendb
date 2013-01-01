@@ -26,36 +26,35 @@ namespace Raven.Database.Impl
 			this.transactionInformation = transactionInformation;
 		}
 
-		public RavenJArray DeleteByIndex(string indexName, IndexQuery queryToDelete, bool allowStale)
+		public void DeleteByIndex(string indexName, IndexQuery queryToDelete, bool allowStale, RavenJArray results)
 		{
-			return PerformBulkOperation(indexName, queryToDelete, allowStale, (docId, tx) =>
+			PerformBulkOperation(indexName, queryToDelete, allowStale, (docId, tx) =>
 			{
 				database.Delete(docId, null, tx);
 				return new { Document = docId, Deleted = true };
-			});
+			}, results);
 		}
 
-		public RavenJArray UpdateByIndex(string indexName, IndexQuery queryToUpdate, PatchRequest[] patchRequests, bool allowStale)
+		public void UpdateByIndex(string indexName, IndexQuery queryToUpdate, PatchRequest[] patchRequests, bool allowStale, RavenJArray results)
 		{
-			return PerformBulkOperation(indexName, queryToUpdate, allowStale, (docId, tx) =>
+			PerformBulkOperation(indexName, queryToUpdate, allowStale, (docId, tx) =>
 			{
 				var patchResult = database.ApplyPatch(docId, null, patchRequests, tx);
 				return new { Document = docId, Result = patchResult };
-			});
+			}, results);
 		}
 
-		public RavenJArray UpdateByIndex(string indexName, IndexQuery queryToUpdate, ScriptedPatchRequest patch, bool allowStale)
+		public void UpdateByIndex(string indexName, IndexQuery queryToUpdate, ScriptedPatchRequest patch, bool allowStale, RavenJArray results)
 		{
-			return PerformBulkOperation(indexName, queryToUpdate, allowStale, (docId, tx) =>
+			PerformBulkOperation(indexName, queryToUpdate, allowStale, (docId, tx) =>
 			{
 				var patchResult = database.ApplyPatch(docId, null, patch, tx);
 				return new { Document = docId, Result = patchResult.Item1, Debug = patchResult.Item2 };
-			});
+			}, results);
 		}
 
-		private RavenJArray PerformBulkOperation(string index, IndexQuery indexQuery, bool allowStale, Func<string, TransactionInformation, object> batchOperation)
+		private void PerformBulkOperation(string index, IndexQuery indexQuery, bool allowStale, Func<string, TransactionInformation, object> batchOperation, RavenJArray array)
 		{
-			var array = new RavenJArray();
 			var bulkIndexQuery = new IndexQuery
 			{
 				Query = indexQuery.Query,
@@ -93,7 +92,6 @@ namespace Raven.Database.Impl
 					if (batchCount < batchSize) break;
 				}
 			}
-			return array;
 		}
 	}
 }
