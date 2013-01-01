@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Raven.Abstractions.Data;
 using Raven.Abstractions.Indexing;
+using Raven.Abstractions.Util;
 using Raven.Database.Indexing;
 using Raven.Database.Server;
 
@@ -278,7 +279,7 @@ namespace Raven.Database.Data
 			{
 				GroupByItems = query.GroupBy.Select(x => new DynamicQueryMappingItem
 				{
-					From = x,
+					From = RavenQuery.Escape(x),
 					To = x.Replace(".", "").Replace(",", ""),
 					QueryFrom = x
 				}).ToArray();
@@ -295,7 +296,7 @@ namespace Raven.Database.Data
 				{
 					From = x.Item1,
 					To = ReplaceInvalidCharactersForFields(x.Item2),
-					QueryFrom = x.Item2
+					QueryFrom = RavenQuery.Escape(x.Item2)
 				}).OrderByDescending(x => x.QueryFrom.Length).ToArray();
 				if (GroupByItems != null && DynamicAggregation)
 				{
