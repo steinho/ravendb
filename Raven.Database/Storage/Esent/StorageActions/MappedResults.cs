@@ -254,6 +254,9 @@ namespace Raven.Storage.Esent.StorageActions
 				}
 				do
 				{
+                    if (getItemsToReduceParams.Take <= 0)
+                        break;
+
 					var indexFromDb = Api.RetrieveColumnAsString(session, ScheduledReductions, tableColumnsCache.ScheduledReductionColumns["view"], Encoding.Unicode, RetrieveColumnGrbit.RetrieveFromIndex);
 					var levelFromDb =
 						Api.RetrieveColumnAsInt32(session, ScheduledReductions, tableColumnsCache.ScheduledReductionColumns["level"], RetrieveColumnGrbit.RetrieveFromIndex).
@@ -285,9 +288,6 @@ namespace Raven.Storage.Esent.StorageActions
 							}
 						}
 					}
-
-					if (getItemsToReduceParams.Take <= 0)
-						break;
 				} while (Api.TryMoveNext(session, ScheduledReductions));
 
 				getItemsToReduceParams.ReduceKeys.Remove(reduceKey);
